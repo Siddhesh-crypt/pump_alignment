@@ -10,8 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _C {
   static const baseUrl = 'https://pumpalignment.theframeworkstudios.com/api';
   static const appSecret = 'MyPumpApp_S3cr3t_2026';
-  static const razorpayKeyId = 'rzp_test_SqJSft0ZnQnpKp';
-  static const razorpayAmount = 5000;
+  static const razorpayKeyId = 'rzp_live_SqSLvZuzGH7OSW';
+  static const razorpayAmount = 100;
   static const prefIsPremium = 'lic_is_premium';
   static const prefTrialCount = 'lic_trial_count';
   static const prefDeviceId = 'lic_device_id';
