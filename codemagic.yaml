@@ -9,7 +9,7 @@ workflows:
     triggering:
       events:
         - push
-      branches:
+      watched_branches:
         - master
     scripts:
       - name: Initialize and Fetch Dependencies
@@ -18,12 +18,12 @@ workflows:
 
       - name: Build iOS App Bundle
         script: |
-          # Bina Apple Developer Account signing ke app compile karne ke liye --no-codesign flag zaroori hai
+          # Without Apple Developer Account signing, --no-codesign flag is required
           flutter build ios --release --no-codesign
 
       - name: Packaging .app to .ipa Custom Payload
         script: |
-          # Sideloading tools ke liye build ko .ipa package mein convert karna
+          # Packaging into a zip payload for easy sideloading
           mkdir -p Payload
           mv build/ios/iphoneos/Runner.app Payload/
           zip -r pump_alignment.ipa Payload
