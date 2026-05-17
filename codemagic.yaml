@@ -9,8 +9,9 @@ workflows:
     triggering:
       events:
         - push
-      watched_branches:
-        - master
+      branch_patterns:
+        - pattern: 'master'
+          include: true
     scripts:
       - name: Initialize and Fetch Dependencies
         script: |
@@ -18,12 +19,12 @@ workflows:
 
       - name: Build iOS App Bundle
         script: |
-          # Without Apple Developer Account signing, --no-codesign flag is required
+          # Code compile check for non-signed environment
           flutter build ios --release --no-codesign
 
       - name: Packaging .app to .ipa Custom Payload
         script: |
-          # Packaging into a zip payload for easy sideloading
+          # Standard structure packaging execution
           mkdir -p Payload
           mv build/ios/iphoneos/Runner.app Payload/
           zip -r pump_alignment.ipa Payload
