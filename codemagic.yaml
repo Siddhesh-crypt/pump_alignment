@@ -1,9 +1,31 @@
 workflows:
-
-  sample-workflow:
-
-    name: Pump Alignment
-
+  ios-release-workflow:
+    name: Pump Alignment iOS Build
     max_build_duration: 120
-
     instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: stable
+    triggering:
+      events:
+        - push
+      branches:
+        - master
+    scripts:
+      - name: Initialize and Fetch Dependencies
+        script: |
+          flutter pub get
+
+      - name: Build iOS App Bundle
+        script: |
+          # Bina Apple Developer Account signing ke app compile karne ke liye --no-codesign flag zaroori hai
+          flutter build ios --release --no-codesign
+
+      - name: Packaging .app to .ipa Custom Payload
+        script: |
+          # Sideloading tools ke liye build ko .ipa package mein convert karna
+          mkdir -p Payload
+          mv build/ios/iphoneos/Runner.app Payload/
+          zip -r pump_alignment.ipa Payload
+    artifacts:
+      - "*.ipa"
