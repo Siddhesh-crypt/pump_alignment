@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart'; // Added for kIsWeb
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:razorpay_flutter/razorpay_flutter.dart';
@@ -48,12 +49,16 @@ class LicensingService {
     final plugin = DeviceInfoPlugin();
     String id = 'UNKNOWN';
 
-    if (Platform.isAndroid) {
-      final info = await plugin.androidInfo;
-      id = info.id;
-    } else if (Platform.isIOS) {
-      final info = await plugin.iosInfo;
-      id = info.identifierForVendor ?? 'IOS_NO_ID';
+    try {
+      if (Platform.isAndroid) {
+        final info = await plugin.androidInfo;
+        id = info.id;
+      } else if (Platform.isIOS) {
+        final info = await plugin.iosInfo;
+        id = info.identifierForVendor ?? 'IOS_NO_ID';
+      }
+    } catch (e) {
+      debugPrint('Error getting device ID: $e');
     }
 
     await prefs.setString(_C.prefDeviceId, id);
@@ -84,8 +89,8 @@ class LicensingService {
     }
   }
 
-  // ── Auto Restore Engine Trigger ──
   Future<DeviceStatus> fetchDeviceStatus() async {
+    // iOS is always premium by default, but we still fetch to keep local state clean
     final prefs = await SharedPreferences.getInstance();
     final deviceId = await getDeviceId();
     final result = await _post('device_status.php', {'device_id': deviceId});
@@ -184,7 +189,6 @@ class LicensingService {
     if (result['success'] == true && result['is_premium'] == true) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_C.prefIsPremium, true);
-      // Mock unique generation client tracking
       await prefs.setString(_C.prefLicenseKey, 'PUMP-MOCK-UPGRADED');
       return true;
     }
@@ -192,6 +196,9 @@ class LicensingService {
   }
 
   void initRazorpay() {
+    // SECURITY: iOS par Razorpay ko initialize hi mat karo
+    if (!kIsWeb && Platform.isIOS) return;
+
     if (_razorpay != null) return;
     _razorpay = Razorpay();
     _razorpay!.on(Razorpay.EVENT_PAYMENT_SUCCESS, _onPaymentSuccess);
@@ -205,6 +212,9 @@ class LicensingService {
   }
 
   Future<void> openPaywall(BuildContext context) async {
+    // SECURITY: iOS par paywall trigger hone se roko
+    if (!kIsWeb && Platform.isIOS) return;
+
     if (_razorpay == null) initRazorpay();
 
     try {

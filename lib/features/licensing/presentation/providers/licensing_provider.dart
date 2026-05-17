@@ -6,7 +6,6 @@ import '../../licensing_service.dart';
 
 // ── Licensing State ───────────────────────────────────────────────────────────
 class LicensingState {
-  // Original value ko private variable me rakha hai
   final bool _isPremium;
   final int trialCount;
   final bool isLoading;
@@ -49,8 +48,7 @@ class LicensingState {
     bool clearError = false,
   }) {
     return LicensingState(
-      isPremium:
-          isPremium ?? this._isPremium, // Yaha private variable use kiya hai
+      isPremium: isPremium ?? this._isPremium,
       trialCount: trialCount ?? this.trialCount,
       isLoading: isLoading ?? this.isLoading,
       isMockLoading: isMockLoading ?? this.isMockLoading,
@@ -123,7 +121,7 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
   }
 
   Future<bool> consumeTrialAndCheck() async {
-    // Agar iOS hai toh state.isPremium automatically true dega aur trial consume nahi hoga
+    // iOS bypass check: Agar premium true hai (jo iOS pe hoga), trial kam nahi hoga
     if (state.isPremium) return true;
 
     final result = await _service.consumeTrial();
@@ -136,6 +134,9 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
   }
 
   Future<void> initiateRealPayment(dynamic context) async {
+    // Extra security: State level par bhi iOS ko block karein
+    if (!kIsWeb && Platform.isIOS) return;
+
     state = state.copyWith(isPaymentLoading: true, clearError: true);
     await _service.openPaywall(context);
     if (mounted) {
@@ -149,7 +150,7 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
       final success = await _service.simulateMockPayment();
       if (success) {
         state = state.copyWith(isMockLoading: false);
-        await refreshStatus(); // Dynamic sync execution
+        await refreshStatus();
         return true;
       } else {
         state = state.copyWith(

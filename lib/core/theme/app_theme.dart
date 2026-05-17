@@ -4,15 +4,20 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTheme {
   AppTheme._();
 
-  static const _seedColor = Color(
-    0xFF1A6E5A,
-  ); // Deep teal-green — engineering feel
+  static const _seedColor = Color(0xFF1A6E5A);
 
   static ThemeData light() {
     final base = ThemeData(
       useMaterial3: true,
       colorSchemeSeed: _seedColor,
       brightness: Brightness.light,
+      // iOS native swipe-back transition
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
     );
     return base.copyWith(
       textTheme: GoogleFonts.interTextTheme(base.textTheme),
@@ -70,6 +75,12 @@ class AppTheme {
       useMaterial3: true,
       colorSchemeSeed: _seedColor,
       brightness: Brightness.dark,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
     );
     return base.copyWith(
       textTheme: GoogleFonts.interTextTheme(base.textTheme),

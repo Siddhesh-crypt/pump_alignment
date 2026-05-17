@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 class AlignmentInputField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
-  final String? hint; // Optional banaya (?)
+  final String? hint;
   final String? suffixText;
   final String? Function(String?)? validator;
   final FocusNode? focusNode;
@@ -15,7 +15,7 @@ class AlignmentInputField extends StatelessWidget {
     super.key,
     required this.controller,
     required this.label,
-    this.hint, // 'required' keyword hata diya
+    this.hint,
     this.suffixText,
     this.validator,
     this.focusNode,
@@ -28,6 +28,8 @@ class AlignmentInputField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       focusNode: focusNode,
+      // iOS me negative numbers ke liye text input fallback better kaam karta hai agar UI break ho raha ho,
+      // but numbers ke liye standard yehi hai:
       keyboardType: const TextInputType.numberWithOptions(
         signed: true,
         decimal: true,
@@ -46,7 +48,7 @@ class AlignmentInputField extends StatelessWidget {
       validator: validator,
       decoration: InputDecoration(
         labelText: label,
-        hintText: hint ?? '0.00', // Agar hint pass nahi kiya toh default '0.00' dikhega
+        hintText: hint ?? '0.00',
         suffixText: suffixText,
         suffixStyle: TextStyle(
           color: Theme.of(context).colorScheme.primary,

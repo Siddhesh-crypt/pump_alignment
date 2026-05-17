@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../domain/models/alignment_input.dart';
 
 class PlaneToggle extends StatelessWidget {
@@ -15,7 +14,6 @@ class PlaneToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
 
     return Container(
       decoration: BoxDecoration(
@@ -58,6 +56,7 @@ class _PlaneTab extends StatelessWidget {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
+        behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,

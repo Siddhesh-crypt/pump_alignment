@@ -17,12 +17,15 @@ class PaywallScreen extends ConsumerWidget {
       backgroundColor: cs.surface,
       body: SafeArea(
         child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(), // iOS native scroll feel
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Gap(30),
+
+              // ── Premium Icon ──
               Center(
                 child: Container(
                   width: 80,
@@ -40,6 +43,7 @@ class PaywallScreen extends ConsumerWidget {
               ),
               const Gap(24),
 
+              // ── Header Text ──
               Text(
                 state.hasActivatedTrialBefore
                     ? 'Free Trials Exhausted'
@@ -58,7 +62,7 @@ class PaywallScreen extends ConsumerWidget {
               ).animate().fadeIn(delay: 150.ms),
               const Gap(24),
 
-              // ── Professional Real-time License Key Widget Row ──
+              // ── Active License Key Display (If any) ──
               if (state.activeLicenseKey != null) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -91,6 +95,7 @@ class PaywallScreen extends ConsumerWidget {
                 const Gap(24),
               ],
 
+              // ── Features List ──
               ...[
                     (Icons.all_inclusive_rounded, 'Unlimited calculations'),
                     (
@@ -110,6 +115,7 @@ class PaywallScreen extends ConsumerWidget {
                   .slideX(begin: -0.04, end: 0),
               const Gap(32),
 
+              // ── Error Message Display ──
               if (state.errorMessage != null) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -142,13 +148,13 @@ class PaywallScreen extends ConsumerWidget {
                 const Gap(20),
               ],
 
-              // BUTTON 1: Activate Free Trial (Only visible if never activated before)
+              // ── BUTTON 1: Activate Free Trial (Only visible if never activated before) ──
               if (!state.hasActivatedTrialBefore) ...[
                 SizedBox(
                   width: double.infinity,
                   height: 54,
                   child: OutlinedButton.icon(
-                    onPressed: state.isPaymentLoading || state.isMockLoading
+                    onPressed: state.isPaymentLoading
                         ? null
                         : () => ref
                               .read(licensingProvider.notifier)
@@ -170,12 +176,12 @@ class PaywallScreen extends ConsumerWidget {
                 const Gap(14),
               ],
 
-              // BUTTON 2: Real Razorpay Pay Button
+              // ── BUTTON 2: Real Razorpay Pay Button ──
               SizedBox(
                 width: double.infinity,
                 height: 54,
                 child: ElevatedButton.icon(
-                  onPressed: state.isPaymentLoading || state.isMockLoading
+                  onPressed: state.isPaymentLoading
                       ? null
                       : () => ref
                             .read(licensingProvider.notifier)
@@ -198,15 +204,6 @@ class PaywallScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              const Gap(14),
-
-              // BUTTON 3: Sandbox Mock Checkout
-              _MockPaymentButton(
-                isLoading: state.isMockLoading,
-                onPressed: state.isMockLoading || state.isPaymentLoading
-                    ? null
-                    : () => _handleMockPayment(context, ref),
-              ),
               const Gap(24),
             ],
           ),
@@ -214,81 +211,9 @@ class PaywallScreen extends ConsumerWidget {
       ),
     );
   }
-
-  Future<void> _handleMockPayment(BuildContext context, WidgetRef ref) async {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final success = await ref
-        .read(licensingProvider.notifier)
-        .simulateMockPayment();
-
-    if (success) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle_rounded, color: Colors.white),
-              Gap(12),
-              Expanded(
-                child: Text(
-                  '🎉 Premium Unlocked! (Mock Payment Success)',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF1B7A4A),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(20),
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    }
-  }
 }
 
-class _MockPaymentButton extends StatelessWidget {
-  final bool isLoading;
-  final VoidCallback? onPressed;
-
-  const _MockPaymentButton({required this.isLoading, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: cs.tertiary,
-          side: BorderSide(color: cs.tertiary, width: 1.5),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        icon: isLoading
-            ? SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: cs.tertiary,
-                ),
-              )
-            : Icon(Icons.science_rounded, color: cs.tertiary),
-        label: Text(
-          isLoading ? 'Processing Sandbox Token…' : 'Mock Payment (Test Only)',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-    );
-  }
-}
-
+// ── UI Components ──
 class _FeatureRow extends StatelessWidget {
   final IconData icon;
   final String text;
