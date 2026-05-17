@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       flutter: stable
-      xcode: stable
+      xcode: latest # <-- 'stable' ko hatakar 'latest' kiya jo exact version detect karega
     triggering:
       events:
         - push
@@ -19,12 +19,12 @@ workflows:
 
       - name: Build iOS App Bundle
         script: |
-          # Code compile check for non-signed environment
+          # Code compilation without Apple Developer account signing
           flutter build ios --release --no-codesign
 
       - name: Packaging .app to .ipa Custom Payload
         script: |
-          # Standard structure packaging execution
+          # Sideload wrapper bundle creation sequence
           mkdir -p Payload
           mv build/ios/iphoneos/Runner.app Payload/
           zip -r pump_alignment.ipa Payload
