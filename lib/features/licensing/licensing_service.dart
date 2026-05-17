@@ -12,9 +12,9 @@ class _C {
   static const appSecret = 'MyPumpApp_S3cr3t_2026';
   static const razorpayKeyId = 'rzp_live_SqSLvZuzGH7OSW';
 
-  // LIVE PRODUCTION CONFIGURATION
-  static const razorpayAmount = 1; // 36500 paise = ₹365
-  static const subscriptionminutes = 5; // 1 Year Validity
+  // TESTING CONFIGURATION
+  static const razorpayAmount = 100; // 100 paise = 1 Rupee
+  static const subscriptionMinutes = 5; // 5 minutes validity for testing
 
   static const prefIsPremium = 'lic_is_premium';
   static const prefPremiumExpiry = 'lic_premium_expiry';
@@ -23,15 +23,13 @@ class _C {
   static const prefLicenseKey = 'lic_license_key';
   static const prefTrialUsedToken = 'lic_has_used_trial_token';
 }
-// Baaki ka pura code bilkul waise hi rahega jaise maine pichli baar diya tha.
-// Bus "subscriptionMinutes" ki jagah jaha save ho raha ho waha DateTime.now().add(const Duration(days: _C.subscriptionDays)) use karein.
 
 class DeviceStatus {
   final bool isPremium;
   final int trialCount;
   final String? licenseKey;
   final bool allowed;
-  final DateTime? expiryDate; // <-- Added Expiry Date field
+  final DateTime? expiryDate;
 
   const DeviceStatus({
     required this.isPremium,
@@ -74,28 +72,19 @@ class LicensingService {
     return id;
   }
 
-  Future<Map<String, dynamic>> _post(
-    String endpoint,
-    Map<String, dynamic> body,
-  ) async {
+  Future<Map<String, dynamic>> _post(String endpoint, Map<String, dynamic> body) async {
     try {
-      final response = await http
-          .post(
-            Uri.parse('${_C.baseUrl}/$endpoint'),
-            headers: {
-              'Content-Type': 'application/json',
-              'X-App-Secret': _C.appSecret,
-            },
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 15));
+      final response = await http.post(
+        Uri.parse('${_C.baseUrl}/$endpoint'),
+        headers: {'Content-Type': 'application/json', 'X-App-Secret': _C.appSecret},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
       return jsonDecode(response.body) as Map<String, dynamic>;
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Helper function to read expiry from SharedPreferences
   DateTime? _getExpiry(SharedPreferences prefs) {
     final expStr = prefs.getString(_C.prefPremiumExpiry);
     return expStr != null ? DateTime.parse(expStr) : null;
@@ -107,7 +96,7 @@ class LicensingService {
 
     if (isPremium && expiryDate != null) {
       if (DateTime.now().isAfter(expiryDate)) {
-        await prefs.setBool(_C.prefIsPremium, false); // Expired!
+        await prefs.setBool(_C.prefIsPremium, false);
       }
     }
   }
@@ -127,10 +116,8 @@ class LicensingService {
 
       await prefs.setBool(_C.prefIsPremium, isPremium);
       await prefs.setInt(_C.prefTrialCount, trialCount);
-      if (licenseKey != null)
-        await prefs.setString(_C.prefLicenseKey, licenseKey);
-      if (serverExpiry != null)
-        await prefs.setString(_C.prefPremiumExpiry, serverExpiry);
+      if (licenseKey != null) await prefs.setString(_C.prefLicenseKey, licenseKey);
+      if (serverExpiry != null) await prefs.setString(_C.prefPremiumExpiry, serverExpiry);
 
       await _enforceExpiry(prefs);
     }
@@ -139,7 +126,7 @@ class LicensingService {
       isPremium: prefs.getBool(_C.prefIsPremium) ?? false,
       trialCount: prefs.getInt(_C.prefTrialCount) ?? 0,
       licenseKey: prefs.getString(_C.prefLicenseKey),
-      expiryDate: _getExpiry(prefs), // <-- Passed to model
+      expiryDate: _getExpiry(prefs),
     );
   }
 
@@ -154,15 +141,9 @@ class LicensingService {
 
       await prefs.setInt(_C.prefTrialCount, trialCount);
       await prefs.setBool(_C.prefTrialUsedToken, true);
-      if (licenseKey != null)
-        await prefs.setString(_C.prefLicenseKey, licenseKey);
+      if (licenseKey != null) await prefs.setString(_C.prefLicenseKey, licenseKey);
 
-      return DeviceStatus(
-        isPremium: false,
-        trialCount: trialCount,
-        licenseKey: licenseKey,
-        expiryDate: _getExpiry(prefs),
-      );
+      return DeviceStatus(isPremium: false, trialCount: trialCount, licenseKey: licenseKey, expiryDate: _getExpiry(prefs));
     }
     throw Exception(result['message'] ?? 'Failed to initialize free trials.');
   }
@@ -173,12 +154,7 @@ class LicensingService {
     final deviceId = await getDeviceId();
 
     if (prefs.getBool(_C.prefIsPremium) == true) {
-      return DeviceStatus(
-        isPremium: true,
-        trialCount: 0,
-        allowed: true,
-        expiryDate: _getExpiry(prefs),
-      );
+      return DeviceStatus(isPremium: true, trialCount: 0, allowed: true, expiryDate: _getExpiry(prefs));
     }
 
     final result = await _post('use_trial.php', {'device_id': deviceId});
@@ -204,20 +180,10 @@ class LicensingService {
     if (localTrials > 0) {
       final newCount = localTrials - 1;
       await prefs.setInt(_C.prefTrialCount, newCount);
-      return DeviceStatus(
-        isPremium: false,
-        trialCount: newCount,
-        allowed: true,
-        expiryDate: _getExpiry(prefs),
-      );
+      return DeviceStatus(isPremium: false, trialCount: newCount, allowed: true, expiryDate: _getExpiry(prefs));
     }
 
-    return DeviceStatus(
-      isPremium: false,
-      trialCount: 0,
-      allowed: false,
-      expiryDate: _getExpiry(prefs),
-    );
+    return DeviceStatus(isPremium: false, trialCount: 0, allowed: false, expiryDate: _getExpiry(prefs));
   }
 
   Future<bool> simulateMockPayment() async {
@@ -229,9 +195,7 @@ class LicensingService {
       await prefs.setBool(_C.prefIsPremium, true);
       await prefs.setString(_C.prefLicenseKey, 'PUMP-MOCK-UPGRADED');
 
-      final expiryDate = DateTime.now().add(
-        const Duration(minutes: _C.subscriptionminutes),
-      );
+      final expiryDate = DateTime.now().add(const Duration(minutes: _C.subscriptionMinutes));
       await prefs.setString(_C.prefPremiumExpiry, expiryDate.toIso8601String());
       return true;
     }
@@ -258,18 +222,12 @@ class LicensingService {
 
     try {
       final deviceId = await getDeviceId();
-      final orderResult = await _post('create_order.php', {
-        'device_id': deviceId,
-      });
+      final orderResult = await _post('create_order.php', {'device_id': deviceId});
 
       if (orderResult['success'] != true) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Failed to init payment: ${orderResult['message']}',
-              ),
-            ),
+            SnackBar(content: Text('Failed to init payment: ${orderResult['message']}')),
           );
         }
         return;
@@ -305,14 +263,15 @@ class LicensingService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_C.prefIsPremium, true);
 
-      final expiryDate = DateTime.now().add(
-        const Duration(minutes: _C.subscriptionminutes),
-      );
+      // local mapping correctly verify karke save karna zaroori hai state sync ke liye
+      final expiryDate = DateTime.now().add(const Duration(minutes: _C.subscriptionMinutes));
       await prefs.setString(_C.prefPremiumExpiry, expiryDate.toIso8601String());
 
       if (result['license_key'] != null) {
         await prefs.setString(_C.prefLicenseKey, result['license_key']);
       }
+
+      // State controller ko direct force execute notify jayega yaha se
       onPaymentSuccess?.call();
     } else {
       onPaymentFailed?.call();

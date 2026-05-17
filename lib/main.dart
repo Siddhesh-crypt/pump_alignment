@@ -8,49 +8,31 @@ import 'package:pump_alignment/core/theme/app_theme.dart';
 import 'package:pump_alignment/features/licensing/presentation/providers/licensing_provider.dart';
 import 'package:pump_alignment/features/calculator/presentation/screens/calculator_screen.dart';
 import 'package:pump_alignment/features/licensing/licensing_service.dart';
-
-import 'features/licensing/paywall_screen.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ENTRY POINT
-// ─────────────────────────────────────────────────────────────────────────────
+import 'package:pump_alignment/features/licensing/paywall_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Portrait only — clean phone UX
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  // SharedPreferences must be ready before ProviderScope boots
   final prefs = await SharedPreferences.getInstance();
 
   runApp(
     ProviderScope(
-      overrides: [
-        // Inject the already-initialised prefs instance
-        sharedPreferencesProvider.overrideWithValue(prefs),
-      ],
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       child: const RimFaceApp(),
     ),
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SHARED PREFERENCES PROVIDER
-// ─────────────────────────────────────────────────────────────────────────────
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError(
     'sharedPreferencesProvider must be overridden in main() before use.',
   );
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ROOT APP WIDGET
-// ─────────────────────────────────────────────────────────────────────────────
 
 class RimFaceApp extends ConsumerWidget {
   const RimFaceApp({super.key});
@@ -62,15 +44,11 @@ class RimFaceApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system, // Follows device system theme automatically
+      themeMode: ThemeMode.system,
       home: const _AppGate(),
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// APP GATE — State Reactive Engine
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _AppGate extends ConsumerStatefulWidget {
   const _AppGate();
@@ -84,9 +62,10 @@ class _AppGateState extends ConsumerState<_AppGate> {
   void initState() {
     super.initState();
 
-    // ── INTEGRATION MATRIX: Connect Razorpay Callbacks to Riverpod State ──
+    // ── Connect Razorpay Callbacks and Force State Updates ──
     LicensingService.instance.onPaymentSuccess = () {
       if (mounted) {
+        // Direct Provider call block force refresh execute karega
         ref.read(licensingProvider.notifier).refreshStatus();
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -97,7 +76,7 @@ class _AppGateState extends ConsumerState<_AppGate> {
                 SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    '🎉 Payment Verified! Lifetime Premium Unlocked.',
+                    '🎉 Payment Verified! 5 Minutes Test Access Unlocked.',
                     softWrap: true,
                   ),
                 ),
@@ -138,24 +117,17 @@ class _AppGateState extends ConsumerState<_AppGate> {
   Widget build(BuildContext context) {
     final state = ref.watch(licensingProvider);
 
-    // ── Stage 0: Initialising ─────────────────────────────────────────────
     if (state.isLoading) {
       return const _SplashScreen();
     }
 
-    // ── Stage 2 & Premium: Trial active OR paid → Calculator ─────────────
     if (state.canCalculate) {
       return const CalculatorScreen();
     }
 
-    // ── Stage 1 & Stage 3: New user OR expired → Paywall (full screen) ───
     return const PaywallScreen();
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SPLASH SCREEN
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
