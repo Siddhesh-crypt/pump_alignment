@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../licensing_service.dart';
 
+// ── Licensing State ───────────────────────────────────────────────────────────
 class LicensingState {
   final bool _isPremium;
   final int trialCount;
@@ -16,7 +17,7 @@ class LicensingState {
   final String? activeLicenseKey;
   final String? errorMessage;
   final DateTime? expiryDate;
-  final String? warningMessage; // NEW WARNING STATE
+  final String? warningMessage;
 
   const LicensingState({
     bool isPremium = false,
@@ -37,6 +38,25 @@ class LicensingState {
   }
 
   bool get canCalculate => isPremium || trialCount > 0;
+
+  // ── NEW GETTER: Bache huye din ya minute calculate karne ke liye ──
+  String get timeRecencyLeft {
+    if (expiryDate == null) return '';
+    final difference = expiryDate!.difference(DateTime.now());
+
+    if (difference.isNegative) return 'Expired';
+
+    // Agar difference 1 din se zyada hai toh Days dikhao, nahi toh Minutes dikhao (Testing ke liye)
+    if (difference.inDays >= 1) {
+      return '${difference.inDays} days left';
+    } else {
+      final minutes = difference.inMinutes;
+      if (minutes <= 0) {
+        return '${difference.inSeconds} secs left';
+      }
+      return '$minutes mins left';
+    }
+  }
 
   LicensingState copyWith({
     bool? isPremium,
@@ -70,10 +90,12 @@ class LicensingState {
   }
 }
 
+// ── Notifier ──────────────────────────────────────────────────────────────────
 class LicensingNotifier extends StateNotifier<LicensingState> {
   final LicensingService _service;
   Timer? _expiryTimer;
   Timer? _warningTimer;
+  Timer? _uiRefreshTimer; // To keep the 'minutes/seconds left' badge live on UI
 
   LicensingNotifier(this._service) : super(const LicensingState()) {
     refreshStatus();
@@ -83,12 +105,14 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
   void dispose() {
     _expiryTimer?.cancel();
     _warningTimer?.cancel();
+    _uiRefreshTimer?.cancel();
     super.dispose();
   }
 
   void _scheduleExpiryTimer() {
     _expiryTimer?.cancel();
     _warningTimer?.cancel();
+    _uiRefreshTimer?.cancel();
 
     if (!kIsWeb && Platform.isIOS) return;
 
@@ -97,28 +121,36 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
       if (state.expiryDate!.isAfter(now)) {
         final duration = state.expiryDate!.difference(now);
 
+        // UI live update karne ke liye timer (testing me seconds/minutes live ghat-te dikhenge)
+        _uiRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+          if (mounted) state = state.copyWith();
+        });
+
         // 3 Days before lock warning
         final warningThreshold = const Duration(days: 3);
 
         if (duration > warningThreshold) {
           _warningTimer = Timer(duration - warningThreshold, () {
-            state = state.copyWith(
-              warningMessage:
-                  '⏳ Notice: Your 1-Year Premium Access will expire in 3 days.',
-            );
-          });
-        } else if (duration > const Duration(seconds: 0)) {
-          // Agar pehle se hi 3 din ke andar hai, toh app open hote hi warn karo
-          _warningTimer = Timer(const Duration(seconds: 2), () {
             if (mounted)
               state = state.copyWith(
                 warningMessage:
-                    '⏳ Notice: Your Premium Access is expiring in ${duration.inDays} days!',
+                    '⏳ Notice: Your Premium Access will expire in 3 days.',
               );
+          });
+        } else if (duration > const Duration(seconds: 0)) {
+          _warningTimer = Timer(const Duration(seconds: 2), () {
+            if (mounted) {
+              final displayTime = duration.inDays > 0
+                  ? '${duration.inDays} days'
+                  : '${duration.inMinutes} minutes';
+              state = state.copyWith(
+                warningMessage:
+                    '⏳ Notice: Your Premium Access is expiring in $displayTime!',
+              );
+            }
           });
         }
 
-        // The actual lock timer
         _expiryTimer = Timer(duration, () {
           refreshStatus();
         });
@@ -204,8 +236,7 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
   }
 
   void clearError() => state = state.copyWith(clearError: true);
-  void clearWarning() =>
-      state = state.copyWith(clearWarning: true); // Helps clear UI flag
+  void clearWarning() => state = state.copyWith(clearWarning: true);
 }
 
 final licensingServiceProvider = Provider<LicensingService>(
