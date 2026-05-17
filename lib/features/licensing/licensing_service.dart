@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/foundation.dart'; // Added for kIsWeb
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:razorpay_flutter/razorpay_flutter.dart';
@@ -11,8 +11,13 @@ class _C {
   static const baseUrl = 'https://pumpalignment.theframeworkstudios.com/api';
   static const appSecret = 'MyPumpApp_S3cr3t_2026';
   static const razorpayKeyId = 'rzp_live_SqSLvZuzGH7OSW';
-  static const razorpayAmount = 100;
+
+  // TESTING CONFIGURATION
+  static const razorpayAmount = 100; // 100 paise = 1 Rupee
+  static const subscriptionMinutes = 1; // 5 minutes validity for testing
+
   static const prefIsPremium = 'lic_is_premium';
+  static const prefPremiumExpiry = 'lic_premium_expiry';
   static const prefTrialCount = 'lic_trial_count';
   static const prefDeviceId = 'lic_device_id';
   static const prefLicenseKey = 'lic_license_key';
@@ -70,7 +75,6 @@ class LicensingService {
     Map<String, dynamic> body,
   ) async {
     try {
-      debugPrint('🌐 API CALLING: ${_C.baseUrl}/$endpoint');
       final response = await http
           .post(
             Uri.parse('${_C.baseUrl}/$endpoint'),
@@ -81,17 +85,28 @@ class LicensingService {
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 15));
-
       return jsonDecode(response.body) as Map<String, dynamic>;
     } catch (e) {
-      debugPrint('❌ API NETWORK ERROR: $e');
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
+  // MINUTES EXPIRY HELPER
+  Future<void> _enforceExpiry(SharedPreferences prefs) async {
+    bool isPremium = prefs.getBool(_C.prefIsPremium) ?? false;
+    String? expiryStr = prefs.getString(_C.prefPremiumExpiry);
+
+    if (isPremium && expiryStr != null) {
+      if (DateTime.now().isAfter(DateTime.parse(expiryStr))) {
+        await prefs.setBool(_C.prefIsPremium, false); // Expired!
+      }
+    }
+  }
+
   Future<DeviceStatus> fetchDeviceStatus() async {
-    // iOS is always premium by default, but we still fetch to keep local state clean
     final prefs = await SharedPreferences.getInstance();
+    await _enforceExpiry(prefs);
+
     final deviceId = await getDeviceId();
     final result = await _post('device_status.php', {'device_id': deviceId});
 
@@ -99,15 +114,19 @@ class LicensingService {
       final isPremium = result['is_premium'] as bool? ?? false;
       final trialCount = result['trial_count'] as int? ?? 0;
       final licenseKey = result['license_key'] as String?;
+      final serverExpiry = result['premium_expiry'] as String?;
 
       await prefs.setBool(_C.prefIsPremium, isPremium);
       await prefs.setInt(_C.prefTrialCount, trialCount);
-      if (licenseKey != null) {
+      if (licenseKey != null)
         await prefs.setString(_C.prefLicenseKey, licenseKey);
-      }
+      if (serverExpiry != null)
+        await prefs.setString(_C.prefPremiumExpiry, serverExpiry);
+
+      await _enforceExpiry(prefs);
 
       return DeviceStatus(
-        isPremium: isPremium,
+        isPremium: prefs.getBool(_C.prefIsPremium) ?? false,
         trialCount: trialCount,
         licenseKey: licenseKey,
       );
@@ -131,9 +150,9 @@ class LicensingService {
 
       await prefs.setInt(_C.prefTrialCount, trialCount);
       await prefs.setBool(_C.prefTrialUsedToken, true);
-      if (licenseKey != null) {
+      if (licenseKey != null)
         await prefs.setString(_C.prefLicenseKey, licenseKey);
-      }
+
       return DeviceStatus(
         isPremium: false,
         trialCount: trialCount,
@@ -145,6 +164,7 @@ class LicensingService {
 
   Future<DeviceStatus> consumeTrial() async {
     final prefs = await SharedPreferences.getInstance();
+    await _enforceExpiry(prefs);
     final deviceId = await getDeviceId();
 
     if (prefs.getBool(_C.prefIsPremium) == true) {
@@ -160,9 +180,10 @@ class LicensingService {
 
       await prefs.setInt(_C.prefTrialCount, trialCount);
       await prefs.setBool(_C.prefIsPremium, isPremium);
+      await _enforceExpiry(prefs);
 
       return DeviceStatus(
-        isPremium: isPremium,
+        isPremium: prefs.getBool(_C.prefIsPremium) ?? false,
         trialCount: trialCount,
         allowed: allowed,
       );
@@ -190,15 +211,19 @@ class LicensingService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_C.prefIsPremium, true);
       await prefs.setString(_C.prefLicenseKey, 'PUMP-MOCK-UPGRADED');
+
+      // Changed to minutes
+      final expiryDate = DateTime.now().add(
+        const Duration(minutes: _C.subscriptionMinutes),
+      );
+      await prefs.setString(_C.prefPremiumExpiry, expiryDate.toIso8601String());
       return true;
     }
     return false;
   }
 
   void initRazorpay() {
-    // SECURITY: iOS par Razorpay ko initialize hi mat karo
     if (!kIsWeb && Platform.isIOS) return;
-
     if (_razorpay != null) return;
     _razorpay = Razorpay();
     _razorpay!.on(Razorpay.EVENT_PAYMENT_SUCCESS, _onPaymentSuccess);
@@ -212,9 +237,7 @@ class LicensingService {
   }
 
   Future<void> openPaywall(BuildContext context) async {
-    // SECURITY: iOS par paywall trigger hone se roko
     if (!kIsWeb && Platform.isIOS) return;
-
     if (_razorpay == null) initRazorpay();
 
     try {
@@ -241,7 +264,7 @@ class LicensingService {
         'key': _C.razorpayKeyId,
         'amount': _C.razorpayAmount,
         'name': 'Pump Alignment Pro',
-        'description': 'Lifetime Premium Access',
+        'description': '5 Minutes Test Access', // Updated for testing
         'order_id': orderId,
         'prefill': {'contact': '', 'email': ''},
         'theme': {'color': '#1A6E5A'},
@@ -265,6 +288,13 @@ class LicensingService {
     if (result['success'] == true) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_C.prefIsPremium, true);
+
+      // Successfully paid -> Set 5 Minutes Expiry
+      final expiryDate = DateTime.now().add(
+        const Duration(minutes: _C.subscriptionMinutes),
+      );
+      await prefs.setString(_C.prefPremiumExpiry, expiryDate.toIso8601String());
+
       if (result['license_key'] != null) {
         await prefs.setString(_C.prefLicenseKey, result['license_key']);
       }

@@ -26,7 +26,6 @@ class LicensingState {
     this.errorMessage,
   }) : _isPremium = isPremium;
 
-  // iOS Bypass Logic: Ye automatically iOS par true return karega
   bool get isPremium {
     if (!kIsWeb && Platform.isIOS) {
       return true;
@@ -77,7 +76,6 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
     try {
       final status = await _service.fetchDeviceStatus();
 
-      // Strict dynamic verification checks
       final bool trialUsed =
           localTrialToken ||
           (status.licenseKey != null) ||
@@ -121,7 +119,6 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
   }
 
   Future<bool> consumeTrialAndCheck() async {
-    // iOS bypass check: Agar premium true hai (jo iOS pe hoga), trial kam nahi hoga
     if (state.isPremium) return true;
 
     final result = await _service.consumeTrial();
@@ -134,7 +131,6 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
   }
 
   Future<void> initiateRealPayment(dynamic context) async {
-    // Extra security: State level par bhi iOS ko block karein
     if (!kIsWeb && Platform.isIOS) return;
 
     state = state.copyWith(isPaymentLoading: true, clearError: true);

@@ -199,7 +199,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                                 controller: _aCtrl,
                                 focusNode: _aFocus,
                                 nextFocusNode: _bFocus,
-                                label: 'Value of A (Dial Span)',
+                                label: 'Value of A in mm',
                                 suffixText: 'mm',
                                 validator: (v) =>
                                     Validators.nonZeroDouble(v, 'A'),
@@ -209,7 +209,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                                 controller: _bCtrl,
                                 focusNode: _bFocus,
                                 nextFocusNode: _cFocus,
-                                label: 'Value of B (Coupling to Front)',
+                                label: 'Value of B in mm',
                                 suffixText: 'mm',
                                 validator: (v) =>
                                     Validators.requiredDouble(v, 'B'),
@@ -219,7 +219,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                                 controller: _cCtrl,
                                 focusNode: _cFocus,
                                 nextFocusNode: _faceFocus,
-                                label: 'Value of C (Front to Rear)',
+                                label: 'Value of C in mm',
                                 suffixText: 'mm',
                                 validator: (v) =>
                                     Validators.requiredDouble(v, 'C'),
@@ -242,7 +242,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                                       controller: _faceCtrl,
                                       focusNode: _faceFocus,
                                       nextFocusNode: _rimFocus,
-                                      label: 'Face TIR',
+                                      label: 'Face TIR in mm',
                                       suffixText: 'mm',
                                       validator: (v) =>
                                           Validators.requiredDouble(
@@ -256,7 +256,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                                     child: AlignmentInputField(
                                       controller: _rimCtrl,
                                       focusNode: _rimFocus,
-                                      label: 'Rim TIR',
+                                      label: 'Rim TIR in mm',
                                       suffixText: 'mm',
                                       isLast: true,
                                       validator: (v) =>
@@ -275,7 +275,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                     ),
                   ),
                   const Gap(16),
-                  _FormulaReference(plane: planeName),
+                  // _FormulaReference(plane: planeName),
                   const Gap(24),
                   ElevatedButton.icon(
                     onPressed: _isCalculating ? null : _onCalculatePressed,
