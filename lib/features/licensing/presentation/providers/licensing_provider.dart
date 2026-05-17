@@ -1,5 +1,7 @@
+import 'dart:async'; // <-- Timer ke liye zaroori import
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart'; // Added for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../licensing_service.dart';
@@ -14,6 +16,7 @@ class LicensingState {
   final bool hasActivatedTrialBefore;
   final String? activeLicenseKey;
   final String? errorMessage;
+  final DateTime? expiryDate; // <-- Added to state
 
   const LicensingState({
     bool isPremium = false,
@@ -24,6 +27,7 @@ class LicensingState {
     this.hasActivatedTrialBefore = false,
     this.activeLicenseKey,
     this.errorMessage,
+    this.expiryDate,
   }) : _isPremium = isPremium;
 
   bool get isPremium {
@@ -44,6 +48,7 @@ class LicensingState {
     bool? hasActivatedTrialBefore,
     String? activeLicenseKey,
     String? errorMessage,
+    DateTime? expiryDate,
     bool clearError = false,
   }) {
     return LicensingState(
@@ -56,6 +61,7 @@ class LicensingState {
           hasActivatedTrialBefore ?? this.hasActivatedTrialBefore,
       activeLicenseKey: activeLicenseKey ?? this.activeLicenseKey,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      expiryDate: expiryDate ?? this.expiryDate,
     );
   }
 }
@@ -63,9 +69,43 @@ class LicensingState {
 // ── Notifier ──────────────────────────────────────────────────────────────────
 class LicensingNotifier extends StateNotifier<LicensingState> {
   final LicensingService _service;
+  Timer? _expiryTimer; // <-- The Timer
 
   LicensingNotifier(this._service) : super(const LicensingState()) {
     refreshStatus();
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    super.dispose();
+  }
+
+  // ── AUTOMATIC LOCK LOGIC ──
+  void _scheduleExpiryTimer() {
+    _expiryTimer?.cancel();
+
+    // Do not set expiry timer for iOS bypass
+    if (!kIsWeb && Platform.isIOS) return;
+
+    if (state.isPremium && state.expiryDate != null) {
+      final now = DateTime.now();
+      if (state.expiryDate!.isAfter(now)) {
+        final duration = state.expiryDate!.difference(now);
+        debugPrint(
+          'Lock Timer Scheduled for: ${duration.inMinutes} mins ${duration.inSeconds % 60} secs',
+        );
+
+        // Setup countdown
+        _expiryTimer = Timer(duration, () {
+          debugPrint('Timer Fired! App is auto-locking now.');
+          refreshStatus(); // Force state rebuild (Throws user to paywall)
+        });
+      } else {
+        // Already expired
+        refreshStatus();
+      }
+    }
   }
 
   Future<void> refreshStatus() async {
@@ -85,10 +125,13 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
         isPremium: status.isPremium,
         trialCount: status.trialCount,
         activeLicenseKey: status.licenseKey,
+        expiryDate: status.expiryDate, // <-- Store expiry
         hasActivatedTrialBefore: trialUsed,
         isLoading: false,
         clearError: true,
       );
+
+      _scheduleExpiryTimer(); // Start timer after status fetch
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -107,6 +150,7 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
         isPremium: false,
         trialCount: result.trialCount,
         activeLicenseKey: result.licenseKey,
+        expiryDate: result.expiryDate,
         hasActivatedTrialBefore: true,
         isLoading: false,
       );
@@ -119,14 +163,27 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
   }
 
   Future<bool> consumeTrialAndCheck() async {
-    if (state.isPremium) return true;
+    if (!kIsWeb && Platform.isIOS) return true;
+
+    // DOUBLE CHECK: Even if they press the calculate button, check expiry instantly
+    if (state.isPremium && state.expiryDate != null) {
+      if (DateTime.now().isAfter(state.expiryDate!)) {
+        await refreshStatus(); // Auto Lock
+        return false;
+      }
+      return true;
+    }
 
     final result = await _service.consumeTrial();
     state = state.copyWith(
       isPremium: result.isPremium,
       trialCount: result.trialCount,
+      expiryDate: result.expiryDate,
       clearError: true,
     );
+
+    _scheduleExpiryTimer(); // Re-evaluate timer if needed
+
     return result.allowed;
   }
 
@@ -146,7 +203,7 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
       final success = await _service.simulateMockPayment();
       if (success) {
         state = state.copyWith(isMockLoading: false);
-        await refreshStatus();
+        await refreshStatus(); // this will start the timer automatically
         return true;
       } else {
         state = state.copyWith(

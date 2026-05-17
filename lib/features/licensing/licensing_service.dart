@@ -14,7 +14,7 @@ class _C {
 
   // TESTING CONFIGURATION
   static const razorpayAmount = 100; // 100 paise = 1 Rupee
-  static const subscriptionMinutes = 1; // 5 minutes validity for testing
+  static const subscriptionMinutes = 5; // 5 minutes validity for testing
 
   static const prefIsPremium = 'lic_is_premium';
   static const prefPremiumExpiry = 'lic_premium_expiry';
@@ -29,12 +29,14 @@ class DeviceStatus {
   final int trialCount;
   final String? licenseKey;
   final bool allowed;
+  final DateTime? expiryDate; // <-- Added Expiry Date field
 
   const DeviceStatus({
     required this.isPremium,
     required this.trialCount,
     this.licenseKey,
     this.allowed = true,
+    this.expiryDate,
   });
 }
 
@@ -91,13 +93,18 @@ class LicensingService {
     }
   }
 
-  // MINUTES EXPIRY HELPER
+  // Helper function to read expiry from SharedPreferences
+  DateTime? _getExpiry(SharedPreferences prefs) {
+    final expStr = prefs.getString(_C.prefPremiumExpiry);
+    return expStr != null ? DateTime.parse(expStr) : null;
+  }
+
   Future<void> _enforceExpiry(SharedPreferences prefs) async {
     bool isPremium = prefs.getBool(_C.prefIsPremium) ?? false;
-    String? expiryStr = prefs.getString(_C.prefPremiumExpiry);
+    DateTime? expiryDate = _getExpiry(prefs);
 
-    if (isPremium && expiryStr != null) {
-      if (DateTime.now().isAfter(DateTime.parse(expiryStr))) {
+    if (isPremium && expiryDate != null) {
+      if (DateTime.now().isAfter(expiryDate)) {
         await prefs.setBool(_C.prefIsPremium, false); // Expired!
       }
     }
@@ -124,18 +131,13 @@ class LicensingService {
         await prefs.setString(_C.prefPremiumExpiry, serverExpiry);
 
       await _enforceExpiry(prefs);
-
-      return DeviceStatus(
-        isPremium: prefs.getBool(_C.prefIsPremium) ?? false,
-        trialCount: trialCount,
-        licenseKey: licenseKey,
-      );
     }
 
     return DeviceStatus(
       isPremium: prefs.getBool(_C.prefIsPremium) ?? false,
       trialCount: prefs.getInt(_C.prefTrialCount) ?? 0,
       licenseKey: prefs.getString(_C.prefLicenseKey),
+      expiryDate: _getExpiry(prefs), // <-- Passed to model
     );
   }
 
@@ -157,6 +159,7 @@ class LicensingService {
         isPremium: false,
         trialCount: trialCount,
         licenseKey: licenseKey,
+        expiryDate: _getExpiry(prefs),
       );
     }
     throw Exception(result['message'] ?? 'Failed to initialize free trials.');
@@ -168,7 +171,12 @@ class LicensingService {
     final deviceId = await getDeviceId();
 
     if (prefs.getBool(_C.prefIsPremium) == true) {
-      return const DeviceStatus(isPremium: true, trialCount: 0, allowed: true);
+      return DeviceStatus(
+        isPremium: true,
+        trialCount: 0,
+        allowed: true,
+        expiryDate: _getExpiry(prefs),
+      );
     }
 
     final result = await _post('use_trial.php', {'device_id': deviceId});
@@ -186,6 +194,7 @@ class LicensingService {
         isPremium: prefs.getBool(_C.prefIsPremium) ?? false,
         trialCount: trialCount,
         allowed: allowed,
+        expiryDate: _getExpiry(prefs),
       );
     }
 
@@ -197,10 +206,16 @@ class LicensingService {
         isPremium: false,
         trialCount: newCount,
         allowed: true,
+        expiryDate: _getExpiry(prefs),
       );
     }
 
-    return const DeviceStatus(isPremium: false, trialCount: 0, allowed: false);
+    return DeviceStatus(
+      isPremium: false,
+      trialCount: 0,
+      allowed: false,
+      expiryDate: _getExpiry(prefs),
+    );
   }
 
   Future<bool> simulateMockPayment() async {
@@ -212,7 +227,6 @@ class LicensingService {
       await prefs.setBool(_C.prefIsPremium, true);
       await prefs.setString(_C.prefLicenseKey, 'PUMP-MOCK-UPGRADED');
 
-      // Changed to minutes
       final expiryDate = DateTime.now().add(
         const Duration(minutes: _C.subscriptionMinutes),
       );
@@ -264,7 +278,7 @@ class LicensingService {
         'key': _C.razorpayKeyId,
         'amount': _C.razorpayAmount,
         'name': 'Pump Alignment Pro',
-        'description': '5 Minutes Test Access', // Updated for testing
+        'description': '5 Minutes Test Access',
         'order_id': orderId,
         'prefill': {'contact': '', 'email': ''},
         'theme': {'color': '#1A6E5A'},
@@ -289,7 +303,6 @@ class LicensingService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_C.prefIsPremium, true);
 
-      // Successfully paid -> Set 5 Minutes Expiry
       final expiryDate = DateTime.now().add(
         const Duration(minutes: _C.subscriptionMinutes),
       );
