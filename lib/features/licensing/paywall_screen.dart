@@ -103,7 +103,7 @@ class PaywallScreen extends ConsumerWidget {
                     label: Text(
                       state.isPaymentLoading
                           ? 'Initializing Checkout...'
-                          : 'Pay ₹1 — Test 5 Mins Access', // <-- Text updated to 1 Rupee
+                          : 'Pay ₹1 — 5 Minutes Access',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),

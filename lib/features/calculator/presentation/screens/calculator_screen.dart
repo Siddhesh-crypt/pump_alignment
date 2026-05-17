@@ -119,6 +119,31 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
         ? 'Vertical'
         : 'Horizontal';
 
+    // ── NEW: Listen for Expiry Warnings and show a Snackbar ──
+    ref.listen<LicensingState>(licensingProvider, (previous, next) {
+      if (next.warningMessage != null &&
+          next.warningMessage != previous?.warningMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: Colors.white),
+                const Gap(12),
+                Expanded(
+                  child: Text(
+                    next.warningMessage!,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade800, // Warning color
+            duration: const Duration(seconds: 10), // Will stay for 10 seconds
+          ),
+        );
+      }
+    });
+
     return GestureDetector(
       // iOS Tap-to-dismiss keyboard wrapper
       onTap: () => FocusScope.of(context).unfocus(),

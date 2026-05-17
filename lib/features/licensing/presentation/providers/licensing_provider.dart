@@ -1,12 +1,11 @@
-import 'dart:async'; // <-- Timer ke liye zaroori import
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart'; // Added for debugPrint
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../licensing_service.dart';
 
-// ── Licensing State ───────────────────────────────────────────────────────────
 class LicensingState {
   final bool _isPremium;
   final int trialCount;
@@ -16,7 +15,8 @@ class LicensingState {
   final bool hasActivatedTrialBefore;
   final String? activeLicenseKey;
   final String? errorMessage;
-  final DateTime? expiryDate; // <-- Added to state
+  final DateTime? expiryDate;
+  final String? warningMessage; // NEW WARNING STATE
 
   const LicensingState({
     bool isPremium = false,
@@ -28,12 +28,11 @@ class LicensingState {
     this.activeLicenseKey,
     this.errorMessage,
     this.expiryDate,
+    this.warningMessage,
   }) : _isPremium = isPremium;
 
   bool get isPremium {
-    if (!kIsWeb && Platform.isIOS) {
-      return true;
-    }
+    if (!kIsWeb && Platform.isIOS) return true;
     return _isPremium;
   }
 
@@ -49,7 +48,9 @@ class LicensingState {
     String? activeLicenseKey,
     String? errorMessage,
     DateTime? expiryDate,
+    String? warningMessage,
     bool clearError = false,
+    bool clearWarning = false,
   }) {
     return LicensingState(
       isPremium: isPremium ?? this._isPremium,
@@ -62,14 +63,17 @@ class LicensingState {
       activeLicenseKey: activeLicenseKey ?? this.activeLicenseKey,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       expiryDate: expiryDate ?? this.expiryDate,
+      warningMessage: clearWarning
+          ? null
+          : (warningMessage ?? this.warningMessage),
     );
   }
 }
 
-// ── Notifier ──────────────────────────────────────────────────────────────────
 class LicensingNotifier extends StateNotifier<LicensingState> {
   final LicensingService _service;
-  Timer? _expiryTimer; // <-- The Timer
+  Timer? _expiryTimer;
+  Timer? _warningTimer;
 
   LicensingNotifier(this._service) : super(const LicensingState()) {
     refreshStatus();
@@ -78,31 +82,47 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
   @override
   void dispose() {
     _expiryTimer?.cancel();
+    _warningTimer?.cancel();
     super.dispose();
   }
 
-  // ── AUTOMATIC LOCK LOGIC ──
   void _scheduleExpiryTimer() {
     _expiryTimer?.cancel();
+    _warningTimer?.cancel();
 
-    // Do not set expiry timer for iOS bypass
     if (!kIsWeb && Platform.isIOS) return;
 
     if (state.isPremium && state.expiryDate != null) {
       final now = DateTime.now();
       if (state.expiryDate!.isAfter(now)) {
         final duration = state.expiryDate!.difference(now);
-        debugPrint(
-          'Lock Timer Scheduled for: ${duration.inMinutes} mins ${duration.inSeconds % 60} secs',
-        );
 
-        // Setup countdown
+        // 3 Days before lock warning
+        final warningThreshold = const Duration(days: 3);
+
+        if (duration > warningThreshold) {
+          _warningTimer = Timer(duration - warningThreshold, () {
+            state = state.copyWith(
+              warningMessage:
+                  '⏳ Notice: Your 1-Year Premium Access will expire in 3 days.',
+            );
+          });
+        } else if (duration > const Duration(seconds: 0)) {
+          // Agar pehle se hi 3 din ke andar hai, toh app open hote hi warn karo
+          _warningTimer = Timer(const Duration(seconds: 2), () {
+            if (mounted)
+              state = state.copyWith(
+                warningMessage:
+                    '⏳ Notice: Your Premium Access is expiring in ${duration.inDays} days!',
+              );
+          });
+        }
+
+        // The actual lock timer
         _expiryTimer = Timer(duration, () {
-          debugPrint('Timer Fired! App is auto-locking now.');
-          refreshStatus(); // Force state rebuild (Throws user to paywall)
+          refreshStatus();
         });
       } else {
-        // Already expired
         refreshStatus();
       }
     }
@@ -115,7 +135,6 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
 
     try {
       final status = await _service.fetchDeviceStatus();
-
       final bool trialUsed =
           localTrialToken ||
           (status.licenseKey != null) ||
@@ -125,19 +144,17 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
         isPremium: status.isPremium,
         trialCount: status.trialCount,
         activeLicenseKey: status.licenseKey,
-        expiryDate: status.expiryDate, // <-- Store expiry
+        expiryDate: status.expiryDate,
         hasActivatedTrialBefore: trialUsed,
         isLoading: false,
         clearError: true,
       );
-
-      _scheduleExpiryTimer(); // Start timer after status fetch
+      _scheduleExpiryTimer();
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
         hasActivatedTrialBefore: localTrialToken,
-        activeLicenseKey: prefs.getString('lic_license_key'),
-        errorMessage: 'Could not reach server. Using cached data.',
+        errorMessage: 'Network Error.',
       );
     }
   }
@@ -155,25 +172,19 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
         isLoading: false,
       );
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString().replaceAll('Exception:', ''),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
   }
 
   Future<bool> consumeTrialAndCheck() async {
     if (!kIsWeb && Platform.isIOS) return true;
-
-    // DOUBLE CHECK: Even if they press the calculate button, check expiry instantly
     if (state.isPremium && state.expiryDate != null) {
       if (DateTime.now().isAfter(state.expiryDate!)) {
-        await refreshStatus(); // Auto Lock
+        await refreshStatus();
         return false;
       }
       return true;
     }
-
     final result = await _service.consumeTrial();
     state = state.copyWith(
       isPremium: result.isPremium,
@@ -181,54 +192,26 @@ class LicensingNotifier extends StateNotifier<LicensingState> {
       expiryDate: result.expiryDate,
       clearError: true,
     );
-
-    _scheduleExpiryTimer(); // Re-evaluate timer if needed
-
+    _scheduleExpiryTimer();
     return result.allowed;
   }
 
   Future<void> initiateRealPayment(dynamic context) async {
     if (!kIsWeb && Platform.isIOS) return;
-
     state = state.copyWith(isPaymentLoading: true, clearError: true);
     await _service.openPaywall(context);
-    if (mounted) {
-      state = state.copyWith(isPaymentLoading: false);
-    }
-  }
-
-  Future<bool> simulateMockPayment() async {
-    state = state.copyWith(isMockLoading: true, clearError: true);
-    try {
-      final success = await _service.simulateMockPayment();
-      if (success) {
-        state = state.copyWith(isMockLoading: false);
-        await refreshStatus(); // this will start the timer automatically
-        return true;
-      } else {
-        state = state.copyWith(
-          isMockLoading: false,
-          errorMessage: 'Mock payment failed. Check server logs.',
-        );
-        return false;
-      }
-    } catch (e) {
-      state = state.copyWith(
-        isMockLoading: false,
-        errorMessage: 'Network error: $e',
-      );
-      return false;
-    }
+    if (mounted) state = state.copyWith(isPaymentLoading: false);
   }
 
   void clearError() => state = state.copyWith(clearError: true);
+  void clearWarning() =>
+      state = state.copyWith(clearWarning: true); // Helps clear UI flag
 }
 
-// ── Providers ─────────────────────────────────────────────────────────────────
 final licensingServiceProvider = Provider<LicensingService>(
   (ref) => LicensingService.instance,
 );
 final licensingProvider =
-    StateNotifierProvider<LicensingNotifier, LicensingState>((ref) {
-      return LicensingNotifier(ref.watch(licensingServiceProvider));
-    });
+    StateNotifierProvider<LicensingNotifier, LicensingState>(
+      (ref) => LicensingNotifier(ref.watch(licensingServiceProvider)),
+    );
