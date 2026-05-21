@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'custom_keyboard.dart'; // Nayi file ko import karein
 
 class AlignmentInputField extends StatelessWidget {
   final TextEditingController controller;
@@ -25,102 +23,55 @@ class AlignmentInputField extends StatelessWidget {
     this.isLast = false,
   });
 
-  // Minus (-) sign toggle karne ka function
-  void _toggleMinus() {
-    final text = controller.text;
-    if (text.startsWith('-')) {
-      controller.text = text.substring(1);
-    } else {
-      controller.text = '-$text';
-    }
-    // Cursor ko text ke last mein rakhne ke liye
-    controller.selection = TextSelection.fromPosition(
-      TextPosition(offset: controller.text.length),
+  void _openCustomKeyboard(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      barrierColor: Colors.black12, // Minimal background dimming
+      builder: (context) {
+        return AestheticCustomKeyboard(
+          controller: controller,
+          onDone: () {
+            Navigator.pop(context); // Keyboard close karein
+            if (nextFocusNode != null) {
+              FocusScope.of(context).requestFocus(nextFocusNode);
+              // Automaticaly agla keyboard open karne ke liye delay
+              Future.delayed(const Duration(milliseconds: 100), () {
+                nextFocusNode!.requestFocus();
+              });
+            } else {
+              FocusScope.of(context).unfocus();
+            }
+          },
+        );
+      },
     );
-  }
-
-  // Next field par jaane ya keyboard band karne ka function
-  void _handleSubmitted(BuildContext context) {
-    if (nextFocusNode != null) {
-      FocusScope.of(context).requestFocus(nextFocusNode);
-    } else {
-      FocusScope.of(context).unfocus();
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isIOS = !kIsWeb && Platform.isIOS;
+    final cs = Theme.of(context).colorScheme;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextFormField(
-          controller: controller,
-          focusNode: focusNode,
-          // iOS par hum wahi saaf-suthra number pad rakhenge jo aapki image mein hai
-          keyboardType: const TextInputType.numberWithOptions(
-            signed: true,
-            decimal: true,
-          ),
-
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'^-?[0-9]*\.?[0-9]*')),
-          ],
-
-          textInputAction: isLast ? TextInputAction.done : TextInputAction.next,
-          onFieldSubmitted: (_) => _handleSubmitted(context),
-          validator: validator,
-
-          decoration: InputDecoration(
-            labelText: label,
-            hintText: hint ?? '0.00',
-            suffixText: suffixText,
-            border: const OutlineInputBorder(),
-            filled: true,
-            fillColor: Theme.of(
-              context,
-            ).colorScheme.surfaceContainerHighest.withOpacity(0.3),
-          ),
+    return TextFormField(
+      controller: controller,
+      focusNode: focusNode,
+      readOnly: true, // Yeh system keyboard ko aane se rokega
+      onTap: () => _openCustomKeyboard(context),
+      validator: validator,
+      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint ?? '0.00',
+        suffixText: suffixText,
+        border: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
         ),
-
-        // Agar iOS device hai, toh keyboard ke theek upar ye choti minus aur done bar dikhegi
-        if (isIOS && (focusNode?.hasFocus ?? false))
-          Container(
-            color: Colors
-                .grey
-                .shade900, // Aapke dark theme se match karta hua color
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Custom Minus Button
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white30),
-                  ),
-                  onPressed: _toggleMinus,
-                  icon: const Icon(Icons.remove, size: 16),
-                  label: const Text(
-                    "Minus (-)",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-
-                // Done / Next Button
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: () => _handleSubmitted(context),
-                  child: Text(isLast ? "Done" : "Next"),
-                ),
-              ],
-            ),
-          ),
-      ],
+        filled: true,
+        fillColor: cs.surfaceContainerHighest.withOpacity(0.3),
+        // Ek dynamic cursor indicator jaisa look dene ke liye prefix icon
+        prefixIcon: const Icon(Icons.edit_note_rounded, size: 20),
+      ),
     );
   }
 }
