@@ -284,7 +284,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                                       controller: _faceCtrl,
                                       focusNode: _faceFocus,
                                       nextFocusNode: _rimFocus,
-                                      label: 'Face TIR in mm',
+                                      label: 'Axial Reading in mm',
                                       suffixText: 'mm',
                                       validator: (v) =>
                                           Validators.requiredDouble(
@@ -298,7 +298,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                                     child: AlignmentInputField(
                                       controller: _rimCtrl,
                                       focusNode: _rimFocus,
-                                      label: 'Rim TIR in mm',
+                                      label: 'Radial Reading in mm',
                                       suffixText: 'mm',
                                       isLast: true,
                                       validator: (v) =>
