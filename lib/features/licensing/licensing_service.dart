@@ -56,7 +56,8 @@ class LicensingService {
     if (cached != null && cached.isNotEmpty) return cached;
 
     if (kIsWeb) {
-      const webId = 'WEB_USER_SESSION';
+      // Fingerprint: 15+ browser signals → SHA-256 → stable unique ID
+      final webId = await getBrowserDeviceFingerprint();
       await prefs.setString(_C.prefDeviceId, webId);
       return webId;
     }
@@ -78,6 +79,31 @@ class LicensingService {
 
     await prefs.setString(_C.prefDeviceId, id);
     return id;
+  }
+
+  // ── Human-readable label for phpMyAdmin display ──
+  // Web:     "Chrome 124 • Windows 10/11 • 1920×1080 • Asia/Kolkata • 📱Mobile"
+  // Android: "Android • Samsung Galaxy / Pixel"
+  // iOS:     "iOS • iPhone"
+  Future<String> getDeviceLabel() async {
+    if (kIsWeb) {
+      return getBrowserDeviceLabel(); // web_interop_web.dart se aata hai
+    }
+    try {
+      final plugin = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final info = await plugin.androidInfo;
+        final brand = info.brand.isNotEmpty ? info.brand : 'Android';
+        final model = info.model.isNotEmpty ? info.model : '';
+        return 'Android • $brand $model'.trim();
+      } else if (Platform.isIOS) {
+        final info = await plugin.iosInfo;
+        final name = info.name ?? 'iPhone';
+        final model = info.utsname.machine ?? '';
+        return 'iOS • $name ($model)'.trim();
+      }
+    } catch (_) {}
+    return 'Native App';
   }
 
   Future<Map<String, dynamic>> _post(
@@ -303,7 +329,8 @@ class LicensingService {
       // WEB COMPILATION ROUTE: Directly calls index.html JavaScript engine
       if (kIsWeb) {
         final prefs = await SharedPreferences.getInstance();
-        final userId = prefs.getInt('auth_user_id') ?? 0; // Fetch current logged-in ID
+        final userId =
+            prefs.getInt('auth_user_id') ?? 0; // Fetch current logged-in ID
 
         openRazorpayWebCheckoutSafe(
           _C.razorpayKeyId,
