@@ -28,15 +28,17 @@ class AlignmentInputField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       focusNode: focusNode,
-      // iOS me negative numbers ke liye text input fallback better kaam karta hai agar UI break ho raha ho,
-      // but numbers ke liye standard yehi hai:
-      keyboardType: const TextInputType.numberWithOptions(
-        signed: true,
-        decimal: true,
-      ),
+
+      // ── CRITICAL FIX FOR iOS WEB ──
+      // 'text' keyboard type use karne se iOS Safari negative (-) sign dikhata hai.
+      // Humne inputFormatter laga rakha hai jo sirf numbers aur '-' allow karega.
+      keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
+
       inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'^-?\d*\.?\d*')),
+        // Sirf valid numbers aur negative sign allowed
+        FilteringTextInputFormatter.allow(RegExp(r'^-?[0-9]*\.?[0-9]*')),
       ],
+
       textInputAction: isLast ? TextInputAction.done : TextInputAction.next,
       onFieldSubmitted: (_) {
         if (nextFocusNode != null) {
@@ -50,10 +52,9 @@ class AlignmentInputField extends StatelessWidget {
         labelText: label,
         hintText: hint ?? '0.00',
         suffixText: suffixText,
-        suffixStyle: TextStyle(
-          color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.w600,
-        ),
+        border: const OutlineInputBorder(),
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
       ),
     );
   }

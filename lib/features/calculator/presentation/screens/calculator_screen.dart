@@ -13,6 +13,9 @@ import 'package:pump_alignment/features/calculator/presentation/widgets/plane_to
 import 'package:pump_alignment/features/calculator/presentation/widgets/result_card.dart';
 import 'package:pump_alignment/features/licensing/presentation/providers/licensing_provider.dart';
 
+import '../../../licensing/paywall_screen.dart';
+import '../../../licensing/presentation/providers/licensing_state.dart';
+
 class CalculatorScreen extends ConsumerStatefulWidget {
   const CalculatorScreen({super.key});
 
@@ -40,18 +43,21 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
   @override
   void dispose() {
     for (final c in [_aCtrl, _bCtrl, _cCtrl, _faceCtrl, _rimCtrl]) c.dispose();
-    for (final f in [_aFocus, _bFocus, _cFocus, _faceFocus, _rimFocus]) f.dispose();
+    for (final f in [_aFocus, _bFocus, _cFocus, _faceFocus, _rimFocus])
+      f.dispose();
     super.dispose();
   }
 
   void _runCalculation() {
-    ref.read(calculatorProvider.notifier).calculate(
-      a: double.parse(_aCtrl.text.trim()),
-      b: double.parse(_bCtrl.text.trim()),
-      c: double.parse(_cCtrl.text.trim()),
-      faceTIR: double.parse(_faceCtrl.text.trim()),
-      rimTIR: double.parse(_rimCtrl.text.trim()),
-    );
+    ref
+        .read(calculatorProvider.notifier)
+        .calculate(
+          a: double.parse(_aCtrl.text.trim()),
+          b: double.parse(_bCtrl.text.trim()),
+          c: double.parse(_cCtrl.text.trim()),
+          faceTIR: double.parse(_faceCtrl.text.trim()),
+          rimTIR: double.parse(_rimCtrl.text.trim()),
+        );
   }
 
   Future<void> _onCalculatePressed() async {
@@ -61,9 +67,21 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
     setState(() => _isCalculating = true);
 
     try {
-      final allowed = await ref.read(licensingProvider.notifier).consumeTrialAndCheck();
-      if (!mounted) return;
-      if (allowed) _runCalculation();
+      // Yaha par purana method call ho raha tha, ab hum licensing state check karenge
+      final licState = ref.read(licensingProvider);
+
+      // Agar user Premium hai, calculation chalu rakho
+      // Agar premium nahi hai (free user), toh usse paywall par bhej do
+      if (licState.isPremium) {
+        _runCalculation();
+      } else {
+        // Agar premium nahi hai, toh paywall dikhao (Iske liye aap Navigator ka use kar sakte hain)
+        if (mounted) {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const PaywallScreen()));
+        }
+      }
     } finally {
       if (mounted) setState(() => _isCalculating = false);
     }
@@ -78,46 +96,36 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
 
   // ── MODIFIED WIDGET: Ab ye Premium hone par exact validity time show karega ──
   Widget _buildTrialBadge(LicensingState licState) {
-    // Check if it is iOS bypass
     final isIOSDevice = !kIsWeb && Platform.isIOS;
-
-    if (licState.isPremium) {
-      return Padding(
-        padding: const EdgeInsets.only(right: 12),
-        child: Chip(
-          visualDensity: VisualDensity.compact,
-          backgroundColor: Colors.amber.shade100,
-          avatar: const Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 16),
-          label: Text(
-            isIOSDevice ? 'Premium' : licState.timeRecencyLeft, // iOS par unlimited, Android par bacha hua time
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: Colors.amber.shade900,
-            ),
-          ),
-        ),
-      );
-    }
-
-    final count = licState.trialCount;
-    final isLow = count <= 2;
+    final timeText = isIOSDevice ? 'Premium' : licState.timeRecencyLeft;
 
     return Padding(
       padding: const EdgeInsets.only(right: 12),
-      child: Chip(
-        visualDensity: VisualDensity.compact,
-        backgroundColor: isLow
-            ? Theme.of(context).colorScheme.errorContainer
-            : Theme.of(context).colorScheme.secondaryContainer,
-        label: Text(
-          '$count left',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: isLow
-                ? Theme.of(context).colorScheme.onErrorContainer
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 80), // Minimum width fix
+        child: Chip(
+          visualDensity: VisualDensity.compact,
+          backgroundColor: licState.isPremium
+              ? Colors.amber.shade100
+              : Theme.of(context).colorScheme.secondaryContainer,
+          avatar: Icon(
+            licState.isPremium
+                ? Icons.workspace_premium_rounded
+                : Icons.timer_rounded,
+            color: licState.isPremium
+                ? Colors.amber
                 : Theme.of(context).colorScheme.onSecondaryContainer,
+            size: 16,
+          ),
+          label: Text(
+            timeText,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: licState.isPremium
+                  ? Colors.amber.shade900
+                  : Theme.of(context).colorScheme.onSecondaryContainer,
+            ),
           ),
         ),
       ),
@@ -131,21 +139,24 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    final planeName = calcState.plane == AlignmentPlane.vertical ? 'Vertical' : 'Horizontal';
+    final planeName = calcState.plane == AlignmentPlane.vertical
+        ? 'Vertical'
+        : 'Horizontal';
 
     ref.listen<LicensingState>(licensingProvider, (previous, next) {
-      if (next.warningMessage != null && next.warningMessage != previous?.warningMessage) {
+      // ── Fix: Check next.warningMessage for null explicitly ──
+      final msg = next.warningMessage;
+      if (msg != null && msg != previous?.warningMessage) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
                 const Icon(Icons.info_outline_rounded, color: Colors.white),
                 const Gap(12),
-                Expanded(child: Text(next.warningMessage!, style: const TextStyle(fontWeight: FontWeight.bold))),
+                Expanded(child: Text(msg, style: const TextStyle(fontWeight: FontWeight.bold))),
               ],
             ),
             backgroundColor: Colors.orange.shade800,
-            duration: const Duration(seconds: 10),
           ),
         );
       }
@@ -162,8 +173,14 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Shaft Alignment', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-              Text('Rim & Face Calculator', style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text(
+                'Shaft Alignment',
+                style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              /*Text(
+                'Rim & Face Calculator',
+                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),*/
             ],
           ),
           actions: [
@@ -186,10 +203,11 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  PlaneToggle(
+                  /*PlaneToggle(
                     selectedPlane: calcState.plane,
-                    onChanged: (p) => ref.read(calculatorProvider.notifier).setPlane(p),
-                  ),
+                    onChanged: (p) =>
+                        ref.read(calculatorProvider.notifier).setPlane(p),
+                  ),*/
                   const Gap(16),
                   Card(
                     clipBehavior: Clip.antiAlias,
@@ -220,21 +238,33 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                               ),
                               const Gap(12),
                               AlignmentInputField(
-                                controller: _aCtrl, focusNode: _aFocus, nextFocusNode: _bFocus,
-                                label: 'Value of A in mm', suffixText: 'mm',
-                                validator: (v) => Validators.nonZeroDouble(v, 'A'),
+                                controller: _aCtrl,
+                                focusNode: _aFocus,
+                                nextFocusNode: _bFocus,
+                                label: 'Value of A in mm',
+                                suffixText: 'mm',
+                                validator: (v) =>
+                                    Validators.nonZeroDouble(v, 'A'),
                               ),
                               const Gap(12),
                               AlignmentInputField(
-                                controller: _bCtrl, focusNode: _bFocus, nextFocusNode: _cFocus,
-                                label: 'Value of B in mm', suffixText: 'mm',
-                                validator: (v) => Validators.requiredDouble(v, 'B'),
+                                controller: _bCtrl,
+                                focusNode: _bFocus,
+                                nextFocusNode: _cFocus,
+                                label: 'Value of B in mm',
+                                suffixText: 'mm',
+                                validator: (v) =>
+                                    Validators.requiredDouble(v, 'B'),
                               ),
                               const Gap(12),
                               AlignmentInputField(
-                                controller: _cCtrl, focusNode: _cFocus, nextFocusNode: _faceFocus,
-                                label: 'Value of C in mm', suffixText: 'mm',
-                                validator: (v) => Validators.requiredDouble(v, 'C'),
+                                controller: _cCtrl,
+                                focusNode: _cFocus,
+                                nextFocusNode: _faceFocus,
+                                label: 'Value of C in mm',
+                                suffixText: 'mm',
+                                validator: (v) =>
+                                    Validators.requiredDouble(v, 'C'),
                               ),
                               const Gap(24),
                               Divider(color: cs.outlineVariant),
@@ -251,17 +281,31 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                                 children: [
                                   Expanded(
                                     child: AlignmentInputField(
-                                      controller: _faceCtrl, focusNode: _faceFocus, nextFocusNode: _rimFocus,
-                                      label: 'Face TIR in mm', suffixText: 'mm',
-                                      validator: (v) => Validators.requiredDouble(v, 'Face TIR'),
+                                      controller: _faceCtrl,
+                                      focusNode: _faceFocus,
+                                      nextFocusNode: _rimFocus,
+                                      label: 'Face TIR in mm',
+                                      suffixText: 'mm',
+                                      validator: (v) =>
+                                          Validators.requiredDouble(
+                                            v,
+                                            'Face TIR',
+                                          ),
                                     ),
                                   ),
                                   const Gap(12),
                                   Expanded(
                                     child: AlignmentInputField(
-                                      controller: _rimCtrl, focusNode: _rimFocus,
-                                      label: 'Rim TIR in mm', suffixText: 'mm', isLast: true,
-                                      validator: (v) => Validators.requiredDouble(v, 'Rim TIR'),
+                                      controller: _rimCtrl,
+                                      focusNode: _rimFocus,
+                                      label: 'Rim TIR in mm',
+                                      suffixText: 'mm',
+                                      isLast: true,
+                                      validator: (v) =>
+                                          Validators.requiredDouble(
+                                            v,
+                                            'Rim TIR',
+                                          ),
                                     ),
                                   ),
                                 ],
@@ -277,23 +321,34 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                     onPressed: _isCalculating ? null : _onCalculatePressed,
                     icon: _isCalculating
                         ? const SizedBox(
-                      width: 20, height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
                         : const Icon(Icons.calculate_rounded),
                     label: Text(
                       _isCalculating ? 'Processing...' : 'Calculate Correction',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   const Gap(16),
-                  if (calcState.result != null) ResultCard(result: calcState.result!, planeName: planeName),
+                  if (calcState.result != null)
+                    ResultCard(result: calcState.result!, planeName: planeName),
                   if (calcState.errorMessage != null)
                     Padding(
                       padding: const EdgeInsets.all(12),
                       child: Text(
                         calcState.errorMessage!,
-                        style: TextStyle(color: cs.error, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: cs.error,
+                          fontWeight: FontWeight.bold,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ),

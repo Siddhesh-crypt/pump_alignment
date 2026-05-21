@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,34 +11,19 @@ import 'package:pump_alignment/features/licensing/presentation/providers/licensi
 import 'package:pump_alignment/features/calculator/presentation/screens/calculator_screen.dart';
 import 'package:pump_alignment/features/licensing/licensing_service.dart';
 import 'package:pump_alignment/features/licensing/paywall_screen.dart';
+import 'package:pump_alignment/features/auth/presentation/screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
   final prefs = await SharedPreferences.getInstance();
-
-  runApp(
-    ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
-      child: const RimFaceApp(),
-    ),
-  );
+  runApp(ProviderScope(overrides: [sharedPreferencesProvider.overrideWithValue(prefs)], child: const RimFaceApp()));
 }
 
-final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
-  throw UnimplementedError(
-    'sharedPreferencesProvider must be overridden in main() before use.',
-  );
-});
+final sharedPreferencesProvider = Provider<SharedPreferences>((ref) => throw UnimplementedError());
 
 class RimFaceApp extends ConsumerWidget {
   const RimFaceApp({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
@@ -52,135 +39,60 @@ class RimFaceApp extends ConsumerWidget {
 
 class _AppGate extends ConsumerStatefulWidget {
   const _AppGate();
-
   @override
   ConsumerState<_AppGate> createState() => _AppGateState();
 }
 
-class _AppGateState extends ConsumerState<_AppGate> {
+class _AppGateState extends ConsumerState<_AppGate> with WidgetsBindingObserver {
+  Timer? _heartbeatTimer;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
-    // ── Connect Razorpay Callbacks and Force State Updates ──
-    LicensingService.instance.onPaymentSuccess = () {
+    // ── THE KICK-OUT TIMER (3 Seconds Background Check) ──
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (mounted) {
-        // Direct Provider call block force refresh execute karega
-        ref.read(licensingProvider.notifier).refreshStatus();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.verified_user_rounded, color: Colors.white),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '🎉 Payment Verified! 5 Minutes Test Access Unlocked.',
-                    softWrap: true,
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Color(0xFF1A6E5A),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        final prefs = ref.read(sharedPreferencesProvider);
+        if (prefs.containsKey('auth_user_id')) {
+          ref.read(licensingProvider.notifier).checkSessionPulse();
+        }
       }
-    };
+    });
+  }
 
-    LicensingService.instance.onPaymentFailed = () {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.error_outline_rounded, color: Colors.white),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Payment failed or cancelled. Please try again.',
-                    softWrap: true,
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    };
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _heartbeatTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(licensingProvider.notifier).checkSessionPulse();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(licensingProvider);
+    final prefs = ref.watch(sharedPreferencesProvider);
+    if (state.isLoading) return const _SplashScreen();
+    final isUserLoggedIn = prefs.containsKey('auth_user_id');
 
-    if (state.isLoading) {
-      return const _SplashScreen();
-    }
-
-    if (state.canCalculate) {
-      return const CalculatorScreen();
-    }
-
+    if (!isUserLoggedIn) return LoginScreen(onLoginSuccess: () { ref.read(licensingProvider.notifier).refreshStatus(); setState(() {}); });
+    if (state.isPremium) return const CalculatorScreen();
     return const PaywallScreen();
   }
 }
 
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
-
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-
-    return Scaffold(
-      backgroundColor: cs.surface,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                color: cs.primaryContainer,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Icon(
-                Icons.settings_input_component_rounded,
-                size: 48,
-                color: cs.primary,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              AppConstants.appName,
-              style: tt.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: cs.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Initialising…',
-              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: cs.primary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

@@ -43,15 +43,16 @@ class ResultCard extends StatelessWidget {
                 _ResultRow(
                   label: 'Front Feet',
                   value: result.frontFeetForatted,
+                  // Calculation value ko directly pass karein taaki color logic sahi chale
+                  numericValue: result.frontFeet,
                   interpretation: result.frontFeetInterpretation,
-                  isPositive: result.frontFeet >= 0,
                 ),
                 const Gap(12),
                 _ResultRow(
                   label: 'Back Feet',
                   value: result.backFeetFormatted,
+                  numericValue: result.backFeet,
                   interpretation: result.backFeetInterpretation,
-                  isPositive: result.backFeet >= 0,
                 ),
                 const Gap(16),
                 Container(
@@ -88,32 +89,34 @@ class ResultCard extends StatelessWidget {
         )
         .animate()
         .fadeIn(duration: 350.ms)
-        .slideY(begin: 0.1, end: 0, duration: 350.ms, curve: Curves.easeOut);
+        .slideY(begin: 0.1, end: 0, duration: 350.ms);
   }
 }
 
 class _ResultRow extends StatelessWidget {
   final String label;
   final String value;
+  final double numericValue;
   final String interpretation;
-  final bool isPositive;
 
   const _ResultRow({
     required this.label,
     required this.value,
+    required this.numericValue,
     required this.interpretation,
-    required this.isPositive,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final color = value == '0.0000'
+
+    // Logic: 0 par blue/neutral, positive par Green, negative par Red
+    final color = numericValue.abs() < 0.0001
         ? cs.secondary
-        : isPositive
-        ? const Color(0xFF1B7A4A)
-        : const Color(0xFFC0392B);
+        : (numericValue > 0
+              ? const Color(0xFF1B7A4A)
+              : const Color(0xFFC0392B));
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -121,7 +124,7 @@ class _ResultRow extends StatelessWidget {
         Container(
           width: 6,
           height: 6,
-          margin: const EdgeInsets.only(top: 6, right: 10),
+          margin: const EdgeInsets.only(top: 8, right: 10),
           decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle),
         ),
         Expanded(
@@ -135,7 +138,6 @@ class _ResultRow extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              const Gap(2),
               Row(
                 children: [
                   Text(
@@ -144,6 +146,8 @@ class _ResultRow extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                       color: color,
                       letterSpacing: -0.5,
+                      // iOS web par negative sign font issue solve karne ke liye fontFeatures
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                 ],
@@ -152,7 +156,7 @@ class _ResultRow extends StatelessWidget {
                 interpretation,
                 style: tt.bodySmall?.copyWith(
                   color: color,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],

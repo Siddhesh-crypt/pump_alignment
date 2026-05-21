@@ -1,38 +1,82 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
 
-  <!-- iOS meta tags & icons -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="pump_alignment">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <script>
+    // ── Yaha 8th parameter (userId) add kiya gaya hai ──
+    function openRazorpayWebCheckout(key, amount, orderId, name, description, appSecret, baseUrl, userId) {
+      var options = {
+        "key": key,
+        "amount": amount,
+        "name": name,
+        "description": description,
+        "order_id": orderId,
+        "theme": {
+          "color": "#1A6E5A"
+        },
+        "handler": function (response) {
+          // Payment success hone par ye directly backend api ko hit karega browser se
+          fetch(baseUrl + '/verify_payment.php', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-App-Secret': appSecret
+            },
+            body: JSON.stringify({
+              device_id: 'WEB_USER_SESSION',
+              user_id: userId, // ── Yaha backend ko userId pass kiya gaya hai ──
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              // Local storage me data write karna taaki app refresh hone par gate pass ho jaye
+              // ── STORAGE ENGINE ENHANCEMENT FOR FLUTTER WEB ──
+              localStorage.setItem('flutter.lic_is_premium', true);
+              localStorage.setItem('flutter.lic_premium_expiry', '"' + data.premium_expiry + '"');
+              localStorage.setItem('flutter.lic_license_key', '"' + data.license_key + '"');
+
+              // Local pipeline configuration pass hone ke baad app reload execute karein
+              setTimeout(function() {
+                  window.location.reload();
+              }, 200);
+            } else {
+              alert('Payment verification failed on server: ' + data.message);
+            }
+          })
+          .catch(err => alert('Network error verification: ' + err));
+        },
+        "modal": {
+          "ondismiss": function(){
+            console.log('Checkout form closed by user');
+          }
+        }
+      };
+      var rzp = new Razorpay(options);
+      rzp.open();
+    }
+  </script>
 
   <title>pump_alignment</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+<script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
